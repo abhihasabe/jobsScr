@@ -88,6 +88,30 @@ def save_jobs_to_db(jobs: list):
     try:
         for job in jobs:
             try:
+                # Type-safe field normalization
+                is_remote_val = job.get("is_remote")
+                is_remote_int = 1 if is_remote_val in (True, 1, "1", "true", "True") else 0
+
+                skills = job.get("skills")
+                if isinstance(skills, list):
+                    skills = ", ".join(str(s) for s in skills)
+
+                emails = job.get("emails")
+                if isinstance(emails, list):
+                    emails = ", ".join(str(e) for e in emails)
+
+                job_type = job.get("job_type")
+                if isinstance(job_type, list):
+                    job_type = ", ".join(str(t) for t in job_type)
+
+                # Ensure numerical and date columns receive None instead of empty string
+                min_amount = job.get("min_amount") or None
+                max_amount = job.get("max_amount") or None
+                date_posted = job.get("date_posted") or None
+                vacancy_count = job.get("vacancy_count") or None
+                company_rating = job.get("company_rating") or None
+                company_reviews_count = job.get("company_reviews_count") or None
+
                 cursor.execute(sql, (
                     job.get("id"),
                     job.get("site"),
@@ -95,7 +119,7 @@ def save_jobs_to_db(jobs: list):
                     job.get("job_url_direct"),
                     job.get("title"),
                     job.get("description"),
-                    job.get("job_type"),
+                    job_type,
                     job.get("job_level"),
                     job.get("job_function"),
                     job.get("listing_type"),
@@ -106,20 +130,20 @@ def save_jobs_to_db(jobs: list):
                     job.get("company_description"),
                     job.get("company_num_employees"),
                     job.get("company_revenue"),
-                    job.get("company_rating"),
-                    job.get("company_reviews_count"),
+                    company_rating,
+                    company_reviews_count,
                     job.get("location"),
-                    int(job.get("is_remote") or 0),
+                    is_remote_int,
                     job.get("work_from_home_type"),
                     job.get("salary_source"),
                     job.get("interval"),  # from JSON
-                    job.get("min_amount") or None,
-                    job.get("max_amount") or None,
+                    min_amount,
+                    max_amount,
                     job.get("currency"),
-                    job.get("date_posted") or None,
-                    job.get("vacancy_count"),
-                    job.get("emails"),
-                    job.get("skills"),
+                    date_posted,
+                    vacancy_count,
+                    emails,
+                    skills,
                     job.get("experience_range"),
                     job.get("searched_company"),
                 ))
@@ -143,3 +167,20 @@ def save_jobs_to_db(jobs: list):
         conn.close()
 
     return affected_rows
+
+
+if __name__ == "__main__":
+    import json
+    import os
+
+    json_path = "jobs.json"
+    if os.path.exists(json_path):
+        print(f"📂 Reading existing jobs from '{json_path}'...")
+        with open(json_path, "r", encoding="utf-8") as f:
+            jobs_data = json.load(f)
+        print(f"Loaded {len(jobs_data)} jobs. Pushing to database...")
+        saved = save_jobs_to_db(jobs_data)
+        print(f"🎉 Completed! {saved} jobs pushed/updated in database.")
+    else:
+        print(f"❌ '{json_path}' not found. Run 'python run.py' or start the API first.")
+
