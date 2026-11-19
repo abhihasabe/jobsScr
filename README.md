@@ -1,261 +1,223 @@
-<img src="https://github.com/cullenwatson/JobSpy/assets/78247585/ae185b7e-e444-4712-8bb9-fa97f53e896b" width="400">
+# Multi-Source Job Scraper & Database Aggregator
 
-**JobSpy** is a job scraping library with the goal of aggregating all the jobs from popular job boards with one tool.
+An automated, high-performance job aggregator that scrapes live job postings across **11 major job platforms**, normalizes the data into a unified schema, and automatically inserts and updates records in a remote or local **MySQL database** with deduplication.
 
-## Features
+---
 
-- Scrapes job postings from **LinkedIn**, **Indeed**, **Glassdoor**, **Google**, **ZipRecruiter**, & other job boards concurrently
-- Aggregates the job postings in a dataframe
-- Proxies support to bypass blocking
+## 🚀 Features
 
-![jobspy](https://github.com/cullenwatson/JobSpy/assets/78247585/ec7ef355-05f6-4fd3-8161-a817e31c5c57)
+- **11 Integrated Job Sources**:
+  - **JobSpy Scrapers**: LinkedIn, Indeed, Google Jobs, ZipRecruiter, Glassdoor, Naukri (India), Bayt (Middle East), BDJobs (Bangladesh).
+  - **Direct REST APIs**: RemoteOK (Global Remote), Arbeitnow (Europe & Global), Jobicy (Worldwide Remote).
+- **FastAPI Web Service**: Interactive Swagger UI at `/docs` with live scraping and filtering endpoints.
+- **Direct CLI Runner**: Headless script (`run.py`) designed for cron jobs and background tasks.
+- **MySQL Auto-Sync & Deduplication**: Uses `INSERT ... ON DUPLICATE KEY UPDATE` to insert new jobs and update existing listings automatically.
+- **Fault-Tolerant & Concurrent**: Scrapes independent sources in parallel; failures or rate-limits on one platform won't block the others.
+- **A2 Hosting / cPanel Ready**: Includes exact instructions for 6-hour scheduled automated cron runs.
 
-### Installation
+---
 
+## 📁 Project Structure
+
+```text
+├── main.py                 # FastAPI web application (/docs, /sources, /jobs)
+├── run.py                  # CLI script to scrape & push jobs into MySQL (used by cron)
+├── scraper.py              # Unified scraping engine (JobSpy + Custom APIs)
+├── additional_sources.py   # REST scrapers for RemoteOK, Arbeitnow, and Jobicy
+├── save_jobs.py            # MySQL database insertion logic with type sanitization
+├── db.py                   # PyMySQL database connection configuration
+├── test.py                 # Quick DB connection test script
+├── jobs.json               # Local backup snapshot of scraped jobs
+├── requirements.txt        # Python package dependencies
+└── jobspy/                 # Embedded core JobSpy scraping package
 ```
-pip install -U python-jobspy
+
+---
+
+## 📋 Supported Job Sources
+
+| Key | Platform | Type | Region / Specialty |
+| :--- | :--- | :--- | :--- |
+| `linkedin` | **LinkedIn** | Scraper | Global |
+| `indeed` | **Indeed** | Scraper | Global |
+| `google` | **Google Jobs** | Scraper | Aggregates ATS (Greenhouse, Lever, etc.) |
+| `remoteok` | **RemoteOK** | REST API | Global Tech & Remote |
+| `arbeitnow` | **Arbeitnow** | REST API | Europe & Global Tech |
+| `jobicy` | **Jobicy** | REST API | Global Remote |
+| `zip_recruiter` | **ZipRecruiter** | Scraper | US & Canada |
+| `glassdoor` | **Glassdoor** | Scraper | Global |
+| `naukri` | **Naukri** | Scraper | India's #1 Job Board |
+| `bayt` | **Bayt** | Scraper | Middle East & North Africa |
+| `bdjobs` | **BDJobs** | Scraper | Bangladesh |
+
+---
+
+## 🛠️ Local Setup & Installation
+
+### 1. Clone & Navigate to Project
+```bash
+git clone <repository-url>
+cd jobsScr
 ```
 
-_Python version >= [3.10](https://www.python.org/downloads/release/python-3100/) required_
+### 2. Create and Activate Virtual Environment
+```bash
+# macOS / Linux
+python3 -m venv .venv
+source .venv/bin/activate
 
-### Usage
+# Windows (PowerShell)
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+```
 
+### 3. Install Dependencies
+```bash
+pip install -r requirements.txt
+```
+
+### 4. Configure Database Credentials
+Edit `db.py` or set environment variables:
 ```python
-import csv
-from jobspy import scrape_jobs
+# db.py
+import os
+import pymysql
 
-jobs = scrape_jobs(
-    site_name=["indeed", "linkedin", "zip_recruiter", "google"], # "glassdoor", "bayt", "naukri", "bdjobs"
-    search_term="software engineer",
-    google_search_term="software engineer jobs near San Francisco, CA since yesterday",
-    location="San Francisco, CA",
-    results_wanted=20,
-    hours_old=72,
-    country_indeed='USA',
-    
-    # linkedin_fetch_description=True # gets more info such as description, direct job url (slower)
-    # proxies=["208.195.175.46:65095", "208.195.175.45:65095", "localhost"],
-)
-print(f"Found {len(jobs)} jobs")
-print(jobs.head())
-jobs.to_csv("jobs.csv", quoting=csv.QUOTE_NONNUMERIC, escapechar="\\", index=False) # to_excel
+def get_connection():
+    return pymysql.connect(
+        host=os.getenv("DB_HOST", "190.92.174.87"),     # Use "localhost" on cPanel
+        user=os.getenv("DB_USER", "worldjob_abhi"),
+        password=os.getenv("DB_PASSWORD", "Mayu@7081"),
+        database=os.getenv("DB_NAME", "worldjob_jobs"),
+        charset="utf8mb4",
+        cursorclass=pymysql.cursors.DictCursor,
+        autocommit=True
+    )
 ```
 
-### Output
-
+### 5. Verify Database Connection
+```bash
+python3 test.py
 ```
-SITE           TITLE                             COMPANY           CITY          STATE  JOB_TYPE  INTERVAL  MIN_AMOUNT  MAX_AMOUNT  JOB_URL                                            DESCRIPTION
-indeed         Software Engineer                 AMERICAN SYSTEMS  Arlington     VA     None      yearly    200000      150000      https://www.indeed.com/viewjob?jk=5e409e577046...  THIS POSITION COMES WITH A 10K SIGNING BONUS!...
-indeed         Senior Software Engineer          TherapyNotes.com  Philadelphia  PA     fulltime  yearly    135000      110000      https://www.indeed.com/viewjob?jk=da39574a40cb...  About Us TherapyNotes is the national leader i...
-linkedin       Software Engineer - Early Career  Lockheed Martin   Sunnyvale     CA     fulltime  yearly    None        None        https://www.linkedin.com/jobs/view/3693012711      Description:By bringing together people that u...
-linkedin       Full-Stack Software Engineer      Rain              New York      NY     fulltime  yearly    None        None        https://www.linkedin.com/jobs/view/3696158877      Rain’s mission is to create the fastest and ea...
-zip_recruiter Software Engineer - New Grad       ZipRecruiter      Santa Monica  CA     fulltime  yearly    130000      150000      https://www.ziprecruiter.com/jobs/ziprecruiter...  We offer a hybrid work environment. Most US-ba...
-zip_recruiter Software Developer                 TEKsystems        Phoenix       AZ     fulltime  hourly    65          75          https://www.ziprecruiter.com/jobs/teksystems-0...  Top Skills' Details• 6 years of Java developme...
-
+Expected output:
+```text
+Running DB test...
+Connected DB: {'db_name': 'worldjob_jobs'}
+Total rows in jobs table: {'total': ...}
+✅ DB connection test succeeded!
 ```
-
-### Parameters for `scrape_jobs()`
-
-```plaintext
-Optional
-├── site_name (list|str): 
-|    linkedin, zip_recruiter, indeed, glassdoor, google, bayt, bdjobs
-|    (default is all)
-│
-├── search_term (str)
-|
-├── google_search_term (str)
-|     search term for google jobs. This is the only param for filtering google jobs.
-│
-├── location (str)
-│
-├── distance (int): 
-|    in miles, default 50
-│
-├── job_type (str): 
-|    fulltime, parttime, internship, contract
-│
-├── proxies (list): 
-|    in format ['user:pass@host:port', 'localhost']
-|    each job board scraper will round robin through the proxies
-|
-├── is_remote (bool)
-│
-├── results_wanted (int): 
-|    number of job results to retrieve for each site specified in 'site_name'
-│
-├── easy_apply (bool): 
-|    filters for jobs that are hosted on the job board site (LinkedIn easy apply filter no longer works)
-|
-├── user_agent (str): 
-|    override the default user agent which may be outdated
-│
-├── description_format (str): 
-|    markdown, html (Format type of the job descriptions. Default is markdown.)
-│
-├── offset (int): 
-|    starts the search from an offset (e.g. 25 will start the search from the 25th result)
-│
-├── hours_old (int): 
-|    filters jobs by the number of hours since the job was posted 
-|    (ZipRecruiter and Glassdoor round up to next day.)
-│
-├── verbose (int) {0, 1, 2}: 
-|    Controls the verbosity of the runtime printouts 
-|    (0 prints only errors, 1 is errors+warnings, 2 is all logs. Default is 2.)
-
-├── linkedin_fetch_description (bool): 
-|    fetches full description and direct job url for LinkedIn (Increases requests by O(n))
-│
-├── linkedin_company_ids (list[int]): 
-|    searches for linkedin jobs with specific company ids
-|
-├── country_indeed (str): 
-|    filters the country on Indeed & Glassdoor (see below for correct spelling)
-|
-├── enforce_annual_salary (bool): 
-|    converts wages to annual salary
-|
-├── ca_cert (str)
-|    path to CA Certificate file for proxies
-```
-
-```
-├── Indeed limitations:
-|    Only one from this list can be used in a search:
-|    - hours_old
-|    - job_type & is_remote
-|    - easy_apply
-│
-└── LinkedIn limitations:
-|    Only one from this list can be used in a search:
-|    - hours_old
-|    - easy_apply
-```
-
-## Supported Countries for Job Searching
-
-### **LinkedIn**
-
-LinkedIn searches globally & uses only the `location` parameter. 
-
-### **ZipRecruiter**
-
-ZipRecruiter searches for jobs in **US/Canada** & uses only the `location` parameter.
-
-### **Indeed / Glassdoor**
-
-Indeed & Glassdoor supports most countries, but the `country_indeed` parameter is required. Additionally, use the `location`
-parameter to narrow down the location, e.g. city & state if necessary. 
-
-You can specify the following countries when searching on Indeed (use the exact name, * indicates support for Glassdoor):
-
-|                      |              |            |                |
-|----------------------|--------------|------------|----------------|
-| Argentina            | Australia*   | Austria*   | Bahrain        |
-| Belgium*             | Brazil*      | Canada*    | Chile          |
-| China                | Colombia     | Costa Rica | Czech Republic |
-| Denmark              | Ecuador      | Egypt      | Finland        |
-| France*              | Germany*     | Greece     | Hong Kong*     |
-| Hungary              | India*       | Indonesia  | Ireland*       |
-| Israel               | Italy*       | Japan      | Kuwait         |
-| Luxembourg           | Malaysia     | Mexico*    | Morocco        |
-| Netherlands*         | New Zealand* | Nigeria    | Norway         |
-| Oman                 | Pakistan     | Panama     | Peru           |
-| Philippines          | Poland       | Portugal   | Qatar          |
-| Romania              | Saudi Arabia | Singapore* | South Africa   |
-| South Korea          | Spain*       | Sweden     | Switzerland*   |
-| Taiwan               | Thailand     | Turkey     | Ukraine        |
-| United Arab Emirates | UK*          | USA*       | Uruguay        |
-| Venezuela            | Vietnam*     |            |                |
-
-### **Bayt**
-
-Bayt only uses the search_term parameter currently and searches internationally
-
-
-
-## Notes
-* Indeed is the best scraper currently with no rate limiting.  
-* All the job board endpoints are capped at around 1000 jobs on a given search.  
-* LinkedIn is the most restrictive and usually rate limits around the 10th page with one ip. Proxies are a must basically.
-
-## Frequently Asked Questions
-
----
-**Q: Why is Indeed giving unrelated roles?**  
-**A:** Indeed searches the description too.
-
-- use - to remove words
-- "" for exact match
-
-Example of a good Indeed query
-
-```py
-search_term='"engineering intern" software summer (java OR python OR c++) 2025 -tax -marketing'
-```
-
-This searches the description/title and must include software, summer, 2025, one of the languages, engineering intern exactly, no tax, no marketing.
 
 ---
 
-**Q: No results when using "google"?**  
-**A:** You have to use super specific syntax. Search for google jobs on your browser and then whatever pops up in the google jobs search box after applying some filters is what you need to copy & paste into the google_search_term. 
+## 💻 How to Run
+
+### Option A: Run the FastAPI Web Server (Interactive API)
+
+1. **Start the API server**:
+   ```bash
+   uvicorn main:app --reload --host 0.0.0.0 --port 8000
+   ```
+   *(Or run `python3 main.py`)*
+
+2. **Open Swagger UI in your browser**:
+   👉 **`http://localhost:8000/docs`**
+
+3. **Fetch & Save Jobs via cURL**:
+   ```bash
+   # Scrape software engineer roles in San Francisco (or remote) and auto-save to DB
+   curl -G "http://localhost:8000/jobs" \
+     --data-urlencode "job_title=Software Engineer" \
+     --data-urlencode "location=San Francisco, CA" \
+     --data-urlencode "limit=15"
+   ```
+
+   **Target specific platforms**:
+   ```bash
+   curl -G "http://localhost:8000/jobs" \
+     --data-urlencode "job_title=Python Developer" \
+     --data-urlencode "sites=remoteok" \
+     --data-urlencode "sites=arbeitnow" \
+     --data-urlencode "sites=linkedin" \
+     --data-urlencode "limit=15"
+   ```
 
 ---
 
-**Q: Received a response code 429?**  
-**A:** This indicates that you have been blocked by the job board site for sending too many requests. All of the job board sites are aggressive with blocking. We recommend:
+### Option B: Run via CLI (Direct Scrape & DB Push)
 
-- Wait some time between scrapes (site-dependent).
-- Try using the proxies param to change your IP address.
-
----
-
-### JobPost Schema
-
-```plaintext
-JobPost
-├── title
-├── company
-├── company_url
-├── job_url
-├── location
-│   ├── country
-│   ├── city
-│   ├── state
-├── is_remote
-├── description
-├── job_type: fulltime, parttime, internship, contract
-├── job_function
-│   ├── interval: yearly, monthly, weekly, daily, hourly
-│   ├── min_amount
-│   ├── max_amount
-│   ├── currency
-│   └── salary_source: direct_data, description (parsed from posting)
-├── date_posted
-└── emails
-
-Linkedin specific
-└── job_level
-
-Linkedin & Indeed specific
-└── company_industry
-
-Indeed specific
-├── company_country
-├── company_addresses
-├── company_employees_label
-├── company_revenue_label
-├── company_description
-└── company_logo
-
-Naukri specific
-├── skills
-├── experience_range
-├── company_rating
-├── company_reviews_count
-├── vacancy_count
-└── work_from_home_type
+Scrapes jobs and pushes them straight into MySQL without running the web server:
+```bash
+python3 run.py
 ```
-# jobsScr
+
+- Query settings can be adjusted directly in `run.py`:
+  ```python
+  JOB_TITLE = "Software Engineer"
+  LOCATION = "San Francisco, CA"   # Or "Remote", "New York", "India", etc.
+  SELECTED_SITES = ["indeed", "linkedin", "google", "remoteok", "arbeitnow", "jobicy"]
+  ```
+
+---
+
+### Option C: Push Existing `jobs.json` to Database
+If you already have a `jobs.json` snapshot and want to insert it without re-scraping:
+```bash
+python3 save_jobs.py
+```
+
+---
+
+## 🌐 A2 Hosting / cPanel Deployment & Automation
+
+To run this application on **A2 Hosting** or any **cPanel** host and have it scrape & push jobs into MySQL automatically every 6 hours:
+
+### 1. Upload Project Files
+1. Open cPanel **File Manager**.
+2. Upload and extract your project files into your application folder (e.g., `~/whitehattoolbox.com/jobScr`).
+3. In `db.py`, set `host="localhost"` since MySQL is on the same server.
+
+### 2. Install Dependencies via cPanel Terminal
+In cPanel, open **Terminal** (under the "Advanced" section) and run:
+```bash
+source /home/worldjob/virtualenv/whitehattoolbox.com/jobScr/3.12/bin/activate && cd /home/worldjob/whitehattoolbox.com/jobScr && pip install -r requirements.txt
+```
+
+### 3. Schedule the 6-Hour Cron Job
+1. In cPanel, navigate to **Cron Jobs**.
+2. Under **Common Settings**, select **"Once every 6 hours"** (`0 */6 * * *`):
+   - **Minute**: `0`
+   - **Hour**: `*/6` (runs at 00:00, 06:00, 12:00, 18:00)
+   - **Day**: `*`
+   - **Month**: `*`
+   - **Weekday**: `*`
+3. Enter the following **Command**:
+   ```bash
+   /home/worldjob/virtualenv/whitehattoolbox.com/jobScr/3.12/bin/python /home/worldjob/whitehattoolbox.com/jobScr/run.py >> /home/worldjob/whitehattoolbox.com/jobScr/cron.log 2>&1
+   ```
+4. Click **Add New Cron Job**.
+
+All automated execution logs with timestamps will be saved to `cron.log` in your project folder.
+
+---
+
+## 📊 Database Schema (`jobs` table)
+
+The `save_jobs_to_db` function maps to the following MySQL table fields:
+
+- `id` (VARCHAR / Primary Key)
+- `site` (VARCHAR: `indeed`, `linkedin`, `remoteok`, etc.)
+- `job_url`, `job_url_direct` (VARCHAR / TEXT)
+- `title`, `description` (TEXT)
+- `job_type`, `job_level`, `job_function`, `listing_type`
+- `company`, `company_industry`, `company_url`, `company_logo`, `company_description`
+- `company_num_employees`, `company_revenue`, `company_rating`, `company_reviews_count`
+- `location`, `is_remote` (TINYINT: 0 or 1), `work_from_home_type`
+- `salary_source`, `salary_interval`, `min_amount`, `max_amount`, `currency`
+- `date_posted` (DATE), `vacancy_count`, `emails`, `skills`, `experience_range`
+- `searched_company`
+- `updated_at` (TIMESTAMP)
+
+---
+
+## 📄 License
+MIT License
